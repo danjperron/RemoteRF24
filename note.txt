@@ -1,0 +1,74 @@
+Tous on des arduino uno r3 comme microcontroleur
+
+Telecomande (emeteur)
+5 entré configuré pour bouton poussoir
+
+Message a envoyer=
+bouton 1 =envoie un signal a toute les machines pour stop tout
+bouton 2 =envoie signal au cone pour stop le feeder(active un relais sur le uno du cone)
+bouton 3 =envoie signal au cone pour start le feeder (desactive un relais sur sur le uno du cone)
+bouton 4 =envoie signal au primaire pour stop le feeder(active un relais sur le uno du primaire)
+bouton 5 =envoie signal au primaire pour start le feeder(desactive un relais sur le uno du primaire)
+
+--------------------------------------------
+
+Cone Crusher(emeteur ,recepteur)
+
+2 relais en mode sortie
+1 push buttom en mode entré
+
+relay 1 ( actice,desactive feeder)
+relay 2 (actice,desactive une lumiere avertissement blanche)
+
+message a envoyer=
+signal 1 =(stop tout)
+signal 2 =(stop feeder primaire)
+signal 3 =(strat feeder primaire)
+
+reception du signal:
+signal bouton 1 ou signal 1 du tamis = active le relais (stop le feeder)
+signal bouton 3 desactive le relais (start le feeder)
+
+le uno recois un signal dun push buttom instaler sur un bras mecanique du cone pour conaitre letat du feeder (actif ou non actif)
+quand non actif active relay 2
+quand actif desactive relay 2
+
+le uno passe en mode emission 
+
+si le pushbuttom non actif durant plus de 10 sec : envois signal 1 du cone au tamis et au primaire
+ausito que non actif : envoi signal 2 au primaire si redevien actif avant les 10sec attend 5 sec et envois signal 3
+
+-------------------------------------------------
+
+Tamis (emeteur ,recepteur)
+
+2 relais en mode sortie
+1 hall efect sensor en mode entré
+
+signal a envoyer a tout les machine 
+
+signal 1 tamis (stop tout)
+
+recois des signaux de la telecomande et du cone
+envoi des signaux au cone et au primaire
+
+recepetion:
+bouton 1 de la telecomande ou signal 1 du cone=
+stop le tamis (active un relais durant 1 sec, le coupe et active un autre relais durant 1 sec et la coupe aussi)
+
+lecture du rpm par le hallsensor si moin de 1 rpm
+
+passe en mode emission
+envoie : signal 1 du tamis (pour stop tamis, feeder cone et feeder primaire)
+
+----------------------------------------------------------
+
+Primaire Crusher (recepteur)
+1 relais en mode sortie
+
+Relais active = stop feeder
+
+relais a activer quand recois le signal bouton 1 de la telecomande ou signal 1 du tamis ou signal 1 du cone ou signal 2 du cone
+desactiver quand recois le signal 3 du cone
+
+
