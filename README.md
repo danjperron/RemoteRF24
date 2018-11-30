@@ -10,5 +10,5 @@ Vérifier en émulant le hall effect du tambour et le bras du cone.
 Enlever les printf et seulement les ajouter en mode debug.
 
 
-Ulterieurement nous pourrions utiliser le acknoledge pour envoyer les donnés ce qui augmenterais de beaucoup la vitesse de transfer.
+Ultérieurement nous pourrions utiliser le acknoledge pour envoyer les donnés ce qui augmenterais de beaucoup la vitesse de transfer.
 
