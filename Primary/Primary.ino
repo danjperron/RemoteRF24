@@ -3,7 +3,7 @@
 #include "RF24.h"
 #include "printf.h"
 
-
+const uint8_t RF24_CANAL=76;
 // variable pour le time out des LEDS
 // indiquant une bonne communication des unités
 
@@ -62,11 +62,12 @@ void setup()
   Serial.println("NRF24L01 Transmitter");
 
   radio.begin();
-   radio.setChannel(76);  // par 76 par defaux 
+   radio.setChannel(RF24_CANAL);  // par 76 par defaux 
   radio.setRetries(15,15);
   radio.setPayloadSize(8);
+  radio.setPALevel(RF24_PA_HIGH);
   radio.openReadingPipe(1,RF24_PRIMARY);
-  radio.openWritingPipe(RF24_REMOTE);
+  radio.openWritingPipe(0);
   radio.startListening();
   radio.printDetails();
   tempsValide_PRIMARY=millis();
@@ -75,7 +76,7 @@ void setup()
 
 
 void loop() {
-
+int retry;
 uint8_t pipe_num=1;
 unsigned long cTimer = millis();
 
@@ -87,26 +88,32 @@ if(radio.available(&pipe_num))
     
     // ok nous avons une connection
     // lisons l'info
-    printf("radio disponible\n");
+    //printf("radio disponible\n");
     if(radio.read(datapacket,1))
     {
     UnitsOutput = datapacket[0];
+    // juste au cas ou ont clean le datapacket
+    while(!radio.read(datapacket,1));
     radio.stopListening();
-    delay(6);    
     radio.openWritingPipe(RF24_REMOTE);
-    radio.write(datapacket,2);
-    delay(5);    
-    radio.openReadingPipe(1,RF24_PRIMARY);
-    radio.startListening();
+    delay(20);    
+//    for(retry=0;retry<5;retry++)
+//     if(radio.write(datapacket,2)) break;   
+    radio.write(datapacket,2);   
+    radio.openWritingPipe(0);  
     printf("recu %d\n",datapacket[0]);
     tempsValide_PRIMARY=millis();
+      radio.startListening();
     // envoyons back;
     }
     else
     printf("bad data\n");
   }
   else
+  {
+    Serial.print(".");
    while(radio.read(datapacket,1));
+  }
   }
   else
   {

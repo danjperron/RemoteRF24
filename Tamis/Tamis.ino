@@ -3,7 +3,7 @@
 #include "RF24.h"
 #include "printf.h"
 
-
+const uint8_t RF24_CANAL=76;
 // verification si le rf24 recoit encore
 unsigned long tempsValide = 0;
 bool Valide = false;
@@ -57,11 +57,13 @@ void setup()
   pinMode(Relay2, OUTPUT);
   Serial.begin(115200);
   radio.begin();
-  radio.setChannel(76);  // par 76 par defaux 
+  radio.setChannel(RF24_CANAL);  // par 76 par defaux 
   radio.setRetries(15,15);
+   radio.setPALevel(RF24_PA_HIGH);
   radio.setPayloadSize(8);
   radio.stopListening();
-  radio.openWritingPipe(RF24_REMOTE);
+//  radio.openWritingPipe(RF24_REMOTE);
+  radio.openWritingPipe(0);
   radio.openReadingPipe(1,RF24_TAMIS);
   radio.startListening();
   radio.printDetails();
@@ -165,16 +167,16 @@ uint8_t pipe_number;
     {
     // envoyons bac1k;
     UnitsOutput = Rcvdatapacket[0];
-    radio.stopListening();
-    radio.openWritingPipe(RF24_REMOTE);
- 
+    while(!radio.read(Rcvdatapacket,1)); // clean reste au cas ou   
+
     Txmdatapacket[0]= rpm;
     Txmdatapacket[1]= rpmTime;
-
-    delay(10);
+    radio.stopListening();
+    delay(30);
+    radio.openWritingPipe(RF24_REMOTE);
     radio.write(Txmdatapacket,2);
-    delay(4);
-    radio.openReadingPipe(0,RF24_CONE);
+    delay(1);
+    radio.openWritingPipe(0);
     radio.startListening();
     printf("recu %d\n",Rcvdatapacket[0]);
     printf("transmet %d %d\n",Txmdatapacket[0],Txmdatapacket[1]);

@@ -3,6 +3,8 @@
 #include "RF24.h"
 #include "printf.h"
 
+const uint8_t RF24_CANAL=76;
+
 
 // variable pour le time out des LEDS
 // indiquant une bonne communication des unités
@@ -71,11 +73,14 @@ void setup()
   Serial.println("NRF24L01 Transmitter");
 
   radio.begin();
-   radio.setChannel(76);  // par 76 par defaux 
+   radio.setChannel(RF24_CANAL);  // par 76 par defaux
+   radio.setDataRate(RF24_1MBPS); 
   radio.setRetries(15,15);
   radio.setPayloadSize(8);
+  radio.setPALevel(RF24_PA_HIGH);
   radio.stopListening();
-  radio.openWritingPipe(RF24_REMOTE);
+// radio.openWritingPipe(RF24_REMOTE);
+ radio.openWritingPipe(0);
   radio.openReadingPipe(1,RF24_CONE);
   radio.startListening();
   radio.printDetails();
@@ -86,7 +91,6 @@ void setup()
 
 void loop() {
 uint8_t pipe_number;
-
 // verification du bouton
 // avec du debounc pour etre certain de ne pas envoyer
 // le rebonsissement des contacts lors du changement 
@@ -115,28 +119,24 @@ if(radio.available(&pipe_number))
     // lisons l'info 
     if(radio.read(Rcvdatapacket,1))
     {
+      printf("got %d\n\r",Rcvdatapacket[0]);
     // envoyons bac1k;
     UnitsOutput = Rcvdatapacket[0];
-    radio.stopListening();
-    radio.openWritingPipe(RF24_REMOTE);
- 
+    while(!radio.read(Rcvdatapacket,1)); // clean reste au cas ou   
     Txmdatapacket[0]= debounceBouton;
-
     unsigned long tempEnSeconde = (millis() - boutonSteadyTime) / 1000L;
-
     if(tempEnSeconde > 100)
        tempEnSeconde = 100;
-   
     Txmdatapacket[1]= tempEnSeconde;
-
-    delay(6);
+    delay(15);
+    radio.stopListening();
+    radio.openWritingPipe(RF24_REMOTE);    
     radio.write(Txmdatapacket,2);
-    delay(4);
-    radio.openReadingPipe(0,RF24_CONE);
+    radio.openWritingPipe(0);
     radio.startListening();
     printf("recu %d\n",Rcvdatapacket[0]);
     printf("transmet %d %d\n",Txmdatapacket[0],Txmdatapacket[1]);
-    
+
     tempsValide=millis();
     }
   }

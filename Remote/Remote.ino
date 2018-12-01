@@ -2,7 +2,7 @@
 #include "RF24.h"
 #include "printf.h"
 
-
+const uint8_t RF24_CANAL=76;
 
 // pour tester
 // permet d'enlever une unité spécifique pour vérifier le fonctionnement
@@ -178,43 +178,65 @@ printf("apres = %d\n",UnitsOutput);
 
 
 unsigned char datapacket[2];
+unsigned char scrappacket;
 
 
 unsigned char SendInfo( uint64_t RF24_TX, unsigned char value)
 {
-  delay(5);
+  bool ok;
+  uint8_t pipe_number;
    // stop listening
-   radio.stopListening();
+  
+   //delay(5);
    //  envoyer UnitsOutput au bon receiver
    printf("radio => %2lx%lx ",(uint32_t)(RF24_TX>>32),(uint32_t) (RF24_TX));
    printf("value = %d  ",value);
+   radio.stopListening(); 
    radio.openWritingPipe(RF24_TX);
-   bool ok = radio.write(&UnitsOutput,2);
+   //radio.stopListening();
+   ok=radio.write(&UnitsOutput,1);
+        
    // start listening
-   delay(1);
    radio.startListening();
 
-    if (ok)
-      printf("ok.....");
-    else
-      printf("failed.");
+//    if (ok)
+//      printf("ok.....");
+//    else
+//      printf("failed.");
       
    
    // maintenant attentons pour un réponse
    unsigned long waitdelay = millis();
-   while(!radio.available())
+   while(1)
     {
+      if(radio.available(&pipe_number))
+        {
+           if(pipe_number==1)
+             {
+               if(radio.read(datapacket,2))
+                 {
+                    // ok nous avons eu une réponse  
+                    printf("return %d %d \n\r",datapacket[0],datapacket[1]);
+                    while(!radio.read(&scrappacket,1)); // clean au cas ou
+                    break;
+                 }
+
+             }
+            else
+             {
+               while(!radio.read(&scrappacket,1));
+             }          
+        }
+      
       if((millis() - waitdelay) > 250)
        {
          printf("return time out\n");
+         radio.stopListening();
          return(0); // ok time out retourne 0
        }
     }
-
-  // ok nous avons eu une réponse 
-  radio.read(datapacket,2);   
-  printf("return %d %d \n\r",datapacket[0],datapacket[1]);
-   return 1;
+      radio.stopListening();
+   return ok;
 }
 
 
@@ -225,7 +247,7 @@ unsigned char SendInfo( uint64_t RF24_TX, unsigned char value)
  */
 void syncInformation(void)
 {
-
+ delay(10);
 #ifdef ENABLE_PRIMARY  
    printf("PRIMARY :");
   // Envoi info au PRIMARY CRUSHER
@@ -351,11 +373,12 @@ void setup()
   Serial.println("NRF24L01 Transmitter");
 
   radio.begin();
-  radio.setChannel(76);  // par 76 par defaux 
+  radio.setChannel(RF24_CANAL);  // par 76 par defaux 
+  radio.setDataRate(RF24_1MBPS);
   radio.setRetries(15,15);
   radio.setPayloadSize(8);
+  radio.setPALevel(RF24_PA_HIGH);
   radio.openReadingPipe(1,RF24_REMOTE);
-  radio.openWritingPipe(RF24_PRIMARY);
   radio.startListening();
   radio.printDetails();
 }
@@ -401,13 +424,13 @@ unsigned char _tBoutons = lireBoutons();
 // Vérifier si cela fait plus de 1 seconde
 // que nous avons pas envoyer . Si oui envoyons l'info
 
-if( (cTimer - currentLapse) > 1000)
+if( (cTimer - currentLapse) > 300)
   {
 printf("Units Output = %d \n",UnitsOutput);
      
      // 1 seconde écoulée  envoyons.
     syncInformation();
-    printf(".");
+    //printf(".");
     currentLapse = cTimer;
   }
 
