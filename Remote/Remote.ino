@@ -13,7 +13,7 @@ const uint8_t RF24_CANAL=83;
 //#undef ENABLE_CONE
 
 #define ENABLE_PRIMARY
-///undef ENABLE_PRIMARY
+#undef ENABLE_PRIMARY
 
 /*
  *  remote control utilisant un nrf24L01
@@ -100,8 +100,9 @@ const unsigned long RF24_TIMEOUT=10000;
 
 uint8_t PRIMARY_ON=1;
 uint8_t CONE_ON=2;
-uint8_t TAMIS_ON=4;
+uint8_t TAMIS_ON=4;  // seulement status par tamis
 uint8_t FORCE_TAMIS_OFF=8;
+
 
 unsigned int UnitsOutput= 0; // all off on boot
 
@@ -304,6 +305,50 @@ unsigned char SendInfo( uint64_t RF24_TX,unsigned char ID, unsigned char value)
 void syncInformation(void)
 {
  delay(20);
+#ifdef ENABLE_TAMIS
+  #ifdef SERIAL_DEBUG
+   printf("TAMIS :");
+  #endif 
+  // Envoi info au TAMIS  retourne   RPM
+    if(SendInfo(RF24_TAMIS,ID_TAMIS,UnitsOutput))
+     {
+         tempsValide_CONE=millis();
+         Valide_TAMIS = true;
+         // TAMIS retourne la valeur en RPM boutton 
+         // datapacket[0] ID_TAMIS
+         // datapacket[1] RPM
+         // datapacket[2] DRUM STATUS  0=DRUM OFF  1=DRUM ON
+         rpm  = datapacket[1];
+         // le status du TAMIS est généré par le tamis
+         //  donc ajustons le status du Tamis
+         if(datapacket[2])
+           UnitsOutput |= TAMIS_ON;
+          else
+           UnitsOutput &= ~TAMIS_ON;
+         
+         if( rpm == 0)
+          {
+            // est-ce que le Tambour fonctionne
+            // ok all off
+            if(datapacket[2])
+                UnitsOutput = FORCE_TAMIS_OFF;
+            else
+                UnitsOutput= 0;    
+          }
+     }
+     else
+     {
+      if((millis() - tempsValide_CONE) >  RF24_TIMEOUT)
+        {
+              // ok time out sur la communication allons faire un stop complet
+               UnitsOutput = 0;
+               Valide_TAMIS = false;
+        }
+     }
+#endif
+
+
+
 #ifdef ENABLE_PRIMARY
   #ifdef SERIAL_DEBUG  
    printf("PRIMARY :");
@@ -341,6 +386,8 @@ void syncInformation(void)
          // datapacket[0] c'est ID_CONE
          // datapacket[1] c'est l'etat du bouton
          // datapacket[2] c'est le temps en secondes
+         if(UnitsOutput&CONE_ON)
+         {
          if(datapacket[1]==0)
            {
 
@@ -361,7 +408,13 @@ void syncInformation(void)
               if(datapacket[2] > 5)
                  UnitsOutput |= PRIMARY_ON;
            }
-
+         }
+          else
+          {
+             // cone crusher off donc PRIMARY OFF
+               UnitsOutput &=  PRIMARY_ON;
+          }
+         
            // si RPM == 0 stop tout anyway
            if(rpm == 0)
             UnitsOutput = FORCE_TAMIS_OFF;
@@ -378,37 +431,6 @@ void syncInformation(void)
 #endif
 
 
-#ifdef ENABLE_TAMIS
-  #ifdef SERIAL_DEBUG
-   printf("TAMIS :");
-  #endif 
-  // Envoi info au TAMIS  retourne   RPM
-    if(SendInfo(RF24_TAMIS,ID_TAMIS,UnitsOutput))
-     {
-         UnitsOutput &= ~FORCE_TAMIS_OFF;  // une fois le force TAMIS OFF envoyer on le reset
-         tempsValide_CONE=millis();
-         Valide_TAMIS = true;
-         // TAMIS retourne la valeur en RPM boutton 
-         // datapacket[0] ID_TAMIS
-         // datapacket[1] RPM
-         // datapacket[2] 0
-         rpm  = datapacket[1];
-         if( rpm == 0)
-          {
-            // ok all off
-            UnitsOutput = FORCE_TAMIS_OFF;
-          }
-     }
-     else
-     {
-      if((millis() - tempsValide_CONE) >  RF24_TIMEOUT)
-        {
-              // ok time out sur la communication allons faire un stop complet
-               UnitsOutput = 0;
-               Valide_TAMIS = false;
-        }
-     }
-#endif
 }
      
  
@@ -494,7 +516,7 @@ unsigned char _tBoutons = lireBoutons();
 // Vérifier si cela fait plus de 1 seconde
 // que nous avons pas envoyer . Si oui envoyons l'info
 
-if( (cTimer - currentLapse) > 100)
+if( (cTimer - currentLapse) > 1000)
   {
 
     #ifdef SERIAL_DEBUG

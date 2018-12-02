@@ -32,12 +32,15 @@ int Relay2 = 3;
 int DataMsg[1];
 int sensorState = 0;
 unsigned int rpm=0;
+unsigned long pulseEcart;  // le temps entre deux impulsions
 unsigned long timeold;
 volatile int rpmcount=0;
 unsigned long rpmTime;
 
 
 bool DrumRun=false;
+bool DrumEnStop=false;
+unsigned long DrumDelay;
 
 RF24 radio(8, 10);
 
@@ -143,6 +146,8 @@ void CylindreCycle(void)
             if((millis() - cycle_delay) > 10)
               {
                 cycle = 0; // c'est fini                
+                DrumEnStop=true;
+                DrumDelay=millis();
               }
               break;
   default:    cycle = 0;
@@ -155,9 +160,16 @@ void CylindreCycle(void)
 void loop() {
 uint8_t pipe_number;
 
+
+
   CylindreCycle();
   if (rpmcount >= 1) {
-    if((millis()-timeold) > HALL_EFFECT_DEBOUNCE)
+
+     pulseEcart = (millis() - timeold);
+     timeold = millis();
+    // est-ce que l'écart entre les deux impulsion est trop longue
+    if(pulseEcart < (60000 / nb_Aimant))  // pour empêcher une compte d'amorcer le ON
+    if(pulseEcart > HALL_EFFECT_DEBOUNCE)
     {
       // temps écoulé avec le dernier interrup ok donc c'est valide
        rpm = (60000 * rpmcount) / (nb_Aimant * (millis() - timeold)); //6 a changer si le nombre daimant est different
@@ -165,7 +177,6 @@ uint8_t pipe_number;
        printf("irq => rpm %d\n\r",rpm);
 #endif
     }
-    timeold = millis();
     rpmcount = 0;
   }
   else
@@ -185,8 +196,26 @@ uint8_t pipe_number;
    
   }
 
-  if(rpm>0)
-     DrumRun=true;
+
+ // verifions si le tambour est en train de s'arrêter
+  if(DrumEnStop)
+    {
+       // un petit delay d'une seconde pour assurer que mécaniquement
+       // le drum est en arrêt
+       if((millis()-DrumDelay) > 1000)
+        {
+           DrumEnStop=false;
+           DrumRun=false;
+           rpm=0;
+        }
+    }
+
+
+  // si le tambour est en arret et que j'ai un RPM donc je roule
+  
+  if(rpm > 0)
+    DrumRun= true;
+
   
   if(radio.available(&pipe_number))
   {
@@ -203,8 +232,9 @@ uint8_t pipe_number;
     if(UnitsOutput & FORCE_TAMIS_OFF)
      if(DrumRun)  // est-ce que le drum roule
      {
-       if(cycle==0) // est-ce que le cylindre est en standby
-         cycle=1;  // ok fait l cycle
+       if(!DrumEnStop) // est-ce que le délais pour arrêt est 
+         if(cycle==0) // est-ce que le cylindre est en standby
+           cycle=1;  // ok fait l cycle
        DrumRun=false;
      }
 
@@ -212,7 +242,7 @@ uint8_t pipe_number;
 
     Txmdatapacket[0]=ID_TAMIS;
     Txmdatapacket[1]= rpm;
-    Txmdatapacket[2]= rpmTime;
+    Txmdatapacket[2]= DrumRun;
     radio.stopListening();
     delay(5);
     radio.openWritingPipe(RF24_REMOTE);
