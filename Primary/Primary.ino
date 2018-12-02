@@ -3,24 +3,28 @@
 #include "RF24.h"
 #include "printf.h"
 
-const uint8_t RF24_CANAL=76;
+#define SERIAL_DEBUG
+//#undef SERIAL_DEBUG
+
+const uint8_t RF24_CANAL=83;
 // variable pour le time out des LEDS
 // indiquant une bonne communication des unités
+
 
 unsigned long tempsValide_PRIMARY = 0;
 
 bool Valide_PRIMARY = false;
 
-#define RF24_TIMEOUT 10000
+const unsigned long RF24_TIMEOUT=10000;
 
 /* variable principale pour les sorties 
  *  l'information envoyer au remote est seulement un byte encoder par le bit définie pour chaque sortie
  *  donc nous avons le tamis, le cone et le primary
  */
 
-#define PRIMARY_ON 1
-#define CONE_ON  2
-#define TAMIS_ON 4
+const uint8_t PRIMARY_ON=1;
+//const uint8_t CONE_ON=2;
+//const uint8_t TAMIS_ON=4;
 
 unsigned int UnitsOutput= 0; // all off on boot
 
@@ -32,7 +36,7 @@ unsigned int UnitsOutput= 0; // all off on boot
  */
 
 
-#define RELAIS 2
+const uint8_t RELAIS=2;
 
 
 // set radio pin 8 CE , pin 10 CS
@@ -47,7 +51,14 @@ const uint64_t RF24_CONE    =0xF0F0F0F0D2LL;
 const uint64_t RF24_PRIMARY =0xF0F0F0F0D3LL;
 
 
-unsigned char datapacket[2];
+
+const uint8_t ID_REMOTE=0xE1;
+const uint8_t ID_TAMIS=0xD1;
+const uint8_t ID_CONE=0xD2;
+const uint8_t ID_PRIMARY=0xD3;
+
+
+unsigned char datapacket[3];
   
  
 void setup()
@@ -59,8 +70,9 @@ void setup()
    printf_begin();
   Serial.begin(115200);
 
-  Serial.println("NRF24L01 Transmitter");
-
+#ifdef SERIAL_DEBUG
+  Serial.println("PRIMARY MODULE\n\r");
+#endif
   radio.begin();
    radio.setChannel(RF24_CANAL);  // par 76 par defaux 
   radio.setRetries(15,15);
@@ -69,7 +81,9 @@ void setup()
   radio.openReadingPipe(1,RF24_PRIMARY);
   radio.openWritingPipe(0);
   radio.startListening();
-  radio.printDetails();
+  #ifdef SERIAL_DEBUG
+   radio.printDetails();
+  #endif
   tempsValide_PRIMARY=millis();
   
 }
@@ -88,31 +102,39 @@ if(radio.available(&pipe_num))
     
     // ok nous avons une connection
     // lisons l'info
-    //printf("radio disponible\n");
-    if(radio.read(datapacket,1))
+    if(radio.read(datapacket,2))
     {
-    UnitsOutput = datapacket[0];
-    // juste au cas ou ont clean le datapacket
-    while(!radio.read(datapacket,1));
+    if(datapacket[0]==ID_REMOTE)
+    {  
+    UnitsOutput = datapacket[1];
     radio.stopListening();
     radio.openWritingPipe(RF24_REMOTE);
-    delay(20);    
-//    for(retry=0;retry<5;retry++)
-//     if(radio.write(datapacket,2)) break;   
-    radio.write(datapacket,2);   
-    radio.openWritingPipe(0);  
-    printf("recu %d\n",datapacket[0]);
+    delay(5);    
+    datapacket[0]=ID_PRIMARY;
+    datapacket[1]=0;
+    datapacket[2]=0;
+    
+    radio.write(datapacket,3);
+    delay(1);   
+    radio.openWritingPipe(0);
+    #ifdef SERIAL_DEBUG  
+      printf("Recu UnitsOutput =%d\n",UnitsOutput);
+    #endif
     tempsValide_PRIMARY=millis();
       radio.startListening();
     // envoyons back;
     }
+    }
     else
-    printf("bad data\n");
+    {
+      #ifdef SERIAL_DEBUG
+        printf("bad data\n");
+      #endif
+    }
   }
   else
   {
-    Serial.print(".");
-   while(radio.read(datapacket,1));
+   radio.read(datapacket,1);
   }
   }
   else

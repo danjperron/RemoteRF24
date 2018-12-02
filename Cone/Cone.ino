@@ -3,7 +3,9 @@
 #include "RF24.h"
 #include "printf.h"
 
-const uint8_t RF24_CANAL=76;
+
+#define SERIAL_DEBUG
+const uint8_t RF24_CANAL=83;
 
 
 // variable pour le time out des LEDS
@@ -11,16 +13,17 @@ const uint8_t RF24_CANAL=76;
 
 unsigned long tempsValide = 0;
 bool Valide = false;
-#define RF24_TIMEOUT 10000
+
+unsigned long RF24_TIMEOUT=10000;
 
 /* variable principale pour les sorties 
  *  l'information envoyer au remote est seulement un byte encoder par le bit définie pour chaque sortie
  *  donc nous avons le tamis, le cone et le primary
  */
 
-#define PRIMARY_ON 1
-#define CONE_ON  2
-#define TAMIS_FORCE_OFF 8
+uint8_t PRIMARY_ON=1;
+uint8_t CONE_ON=2;
+uint8_t TAMIS_FORCE_OFF=8;
 
 unsigned int UnitsOutput= 0; // all off on boot
 
@@ -30,13 +33,15 @@ unsigned int UnitsOutput= 0; // all off on boot
  *  Le cone  retourne le status du boutton avec le delay depuis le dernier changement
  *  
  */
-#define RELAIS_LED 4
-#define RELAIS_FEEDER 3
-#define BOUTON_LEVIER 7
+
+uint8_t RELAIS_LED=4;
+uint8_t RELAIS_FEEDER=3;
+uint8_t BOUTON_LEVIER=7;
 
 
 // premiere chose c'est de debouncer le boutton
-#define DEBOUNCE_DELAY  25
+
+const unsigned long DEBOUNCE_DELAY=25;
 bool currentBouton;
 bool debounceBouton;   // debounce button value
 unsigned long debounceTime; //en millisecond du changement du boutton
@@ -53,10 +58,15 @@ const uint64_t RF24_TAMIS   =0xF0F0F0F0D1LL;
 const uint64_t RF24_CONE    =0xF0F0F0F0D2LL;
 const uint64_t RF24_PRIMARY =0xF0F0F0F0D3LL;
 
+const uint8_t ID_REMOTE=0xE1;
+const uint8_t ID_TAMIS=0xD1;
+const uint8_t ID_CONE=0xD2;
+const uint8_t ID_PRIMARY=0xD3;
+
 
 unsigned char Rcvdatapacket[2];
 
-unsigned char Txmdatapacket[2];
+unsigned char Txmdatapacket[3];
  
 void setup()
 {
@@ -70,8 +80,9 @@ void setup()
   printf_begin();
   Serial.begin(115200);
 
-  Serial.println("NRF24L01 Transmitter");
-
+  #ifdef SERIAL_DEBUG
+  Serial.println("CONE FEEDER NRF24L01 Transmitter");
+  #endif
   radio.begin();
    radio.setChannel(RF24_CANAL);  // par 76 par defaux
    radio.setDataRate(RF24_1MBPS); 
@@ -79,11 +90,12 @@ void setup()
   radio.setPayloadSize(8);
   radio.setPALevel(RF24_PA_HIGH);
   radio.stopListening();
-// radio.openWritingPipe(RF24_REMOTE);
- radio.openWritingPipe(0);
+  radio.openWritingPipe(0);
   radio.openReadingPipe(1,RF24_CONE);
   radio.startListening();
-  radio.printDetails();
+  #ifdef SERIAL_DEBUG
+     radio.printDetails();
+  #endif
   tempsValide=millis();
   
 }
@@ -117,33 +129,37 @@ if(radio.available(&pipe_number))
   {
     // ok nous avons une connection
     // lisons l'info 
-    if(radio.read(Rcvdatapacket,1))
+    if(radio.read(Rcvdatapacket,2))
     {
-      printf("got %d\n\r",Rcvdatapacket[0]);
     // envoyons bac1k;
-    UnitsOutput = Rcvdatapacket[0];
-    while(!radio.read(Rcvdatapacket,1)); // clean reste au cas ou   
-    Txmdatapacket[0]= debounceBouton;
+    if(Rcvdatapacket[0]==ID_REMOTE)
+    {
+    UnitsOutput = Rcvdatapacket[1];
+    Txmdatapacket[0]= ID_CONE;
+    Txmdatapacket[1]= debounceBouton;
     unsigned long tempEnSeconde = (millis() - boutonSteadyTime) / 1000L;
     if(tempEnSeconde > 100)
        tempEnSeconde = 100;
-    Txmdatapacket[1]= tempEnSeconde;
-    delay(15);
+    Txmdatapacket[2]= tempEnSeconde;
+    delay(5);
     radio.stopListening();
     radio.openWritingPipe(RF24_REMOTE);    
-    radio.write(Txmdatapacket,2);
+    radio.write(Txmdatapacket,3);
+    delay(1);
     radio.openWritingPipe(0);
     radio.startListening();
-    printf("recu %d\n",Rcvdatapacket[0]);
-    printf("transmet %d %d\n",Txmdatapacket[0],Txmdatapacket[1]);
-
+    #ifdef SERIAL_DEBUG
+      printf("recu %d\n",Rcvdatapacket[0]);
+      printf("transmet %d %d\n",Txmdatapacket[0],Txmdatapacket[1]);
+    #endif
+    
     tempsValide=millis();
+    }
     }
   }
   else
   {
-     while(!radio.read(Rcvdatapacket,1));
-    
+     radio.read(Rcvdatapacket,1);
   }
 }
   else

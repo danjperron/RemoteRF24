@@ -2,7 +2,7 @@
 #include "RF24.h"
 #include "printf.h"
 
-const uint8_t RF24_CANAL=76;
+const uint8_t RF24_CANAL=83;
 
 // pour tester
 // permet d'enlever une unité spécifique pour vérifier le fonctionnement
@@ -21,12 +21,18 @@ const uint8_t RF24_CANAL=76;
  *  
  */
 
+#define SERIAL_DEBUG
+//#undef SERIAL_DEBUG
+
  
- #define BOUTON_STOP_ALL       2
- #define BOUTON_STOP_CONE      3
- #define BOUTON_START_CONE     4
- #define BOUTON_STOP_PRIMARY   6
- #define BOUTON_START_PRIMARY  7
+const uint8_t BOUTON_STOP_ALL=2;
+const uint8_t BOUTON_STOP_CONE=3;
+const uint8_t BOUTON_START_CONE=4;
+const uint8_t BOUTON_STOP_PRIMARY=6;
+const uint8_t BOUTON_START_PRIMARY=7;
+
+
+
 
 /* DEBOUNCE  INFO avec status des bouttons dans une seule variable
  *  un byte est utilisé avec les bits recevant l'info des bouttons
@@ -40,23 +46,28 @@ const uint8_t RF24_CANAL=76;
 
 // bit weight de chaque boutton
 
- #define BIT_STOP_ALL       1
- #define BIT_STOP_CONE      2
- #define BIT_START_CONE     4
- #define BIT_STOP_PRIMARY   8
- #define BIT_START_PRIMARY  16
+
+const uint8_t BIT_STOP_ALL=1;
+const uint8_t BIT_STOP_CONE=2;
+const uint8_t BIT_START_CONE=4;
+const uint8_t BIT_STOP_PRIMARY=8;
+const uint8_t BIT_START_PRIMARY=16;
+
+uint8_t rpm=0;  // valeur en rpm que le tamis retourne
+                // si 0 arrête tout
+
 
  // 50 ms debounce pour les bouttons semblent bon
- #define DEBOUNCE_MIN 50
+const int DEBOUNCE_MIN=50;
 
 
  /*  
  *  Indicateur LED pour indiquer si les RF24 sont visibles.
  */
 
-#define LED_PRIMARY A0
-#define LED_TAMIS  A1
-#define LED_CONE   A2
+const uint8_t LED_PRIMARY=A0;
+const uint8_t LED_TAMIS=A1;
+const uint8_t LED_CONE=A2;
 
    
 
@@ -80,19 +91,17 @@ bool Valide_PRIMARY = false;
 bool Valide_CONE = false;
 bool Valide_TAMIS = false;
 
-#define RF24_TIMEOUT 10000
-
-
+const unsigned long RF24_TIMEOUT=10000;
 
 /* variable principale pour les sorties 
  *  l'information envoyer au remote est seulement un byte encoder par le bit définie pour chaque sortie
  *  donc nous avons le tamis, le cone et le primary
  */
 
-#define PRIMARY_ON 1
-#define CONE_ON  2
-#define TAMIS_ON 4
-#define FORCE_TAMIS_OFF 8
+uint8_t PRIMARY_ON=1;
+uint8_t CONE_ON=2;
+uint8_t TAMIS_ON=4;
+uint8_t FORCE_TAMIS_OFF=8;
 
 unsigned int UnitsOutput= 0; // all off on boot
 
@@ -115,6 +124,12 @@ const uint64_t RF24_REMOTE  =0xF0F0F0F0E1LL;
 const uint64_t RF24_TAMIS   =0xF0F0F0F0D1LL;
 const uint64_t RF24_CONE    =0xF0F0F0F0D2LL;
 const uint64_t RF24_PRIMARY =0xF0F0F0F0D3LL;
+
+const uint8_t ID_REMOTE=0xE1;
+const uint8_t ID_TAMIS=0xD1;
+const uint8_t ID_CONE=0xD2;
+const uint8_t ID_PRIMARY=0xD3;
+
 
 /* LireBoutons
  *  retourne valeur de chaque boutton dans une valeur binaire
@@ -139,18 +154,47 @@ unsigned char lireBoutons(void)
 
 // decode les boutons
 void decodeAction(void)
-{         
-printf("Decode Action  avant = %d",UnitsOutput);
+{          
+#ifdef SERIAL_DEBUG
+  printf("Decode Action  avant = %d  rpm=%d",UnitsOutput,rpm);
+#endif
+
    if(currentBoutons & BIT_START_CONE)
    {
+     if(rpm>0)
+     {
       UnitsOutput |= CONE_ON;
+#ifdef SERIAL_DEBUG
       printf("=== START CONE ===\n");
+#endif      
+   }
+        else
+        {
+#ifdef SERIAL_DEBUG
+      printf("=== START CONE IMPOSSIBLE RPM=0 ===\n");
+#endif
+          
+        }
+
+   
    }
 
    if(currentBoutons & BIT_START_PRIMARY)
    {
-      UnitsOutput |= PRIMARY_ON;
+      if(rpm>0)
+        {
+         UnitsOutput |= PRIMARY_ON;
+#ifdef SERIAL_DEBUG
       printf("=== START PRIMARY ===\n");
+#endif
+        }
+        else
+        {
+#ifdef SERIAL_DEBUG
+      printf("=== START PRIMARY IMPOSSIBLE RPM=0 ===\n");
+#endif
+          
+        }
    }
 
    // maintenant les stop;
@@ -158,79 +202,91 @@ printf("Decode Action  avant = %d",UnitsOutput);
    if(currentBoutons & BIT_STOP_PRIMARY)
    {
       UnitsOutput &= ~PRIMARY_ON;
+#ifdef SERIAL_DEBUG
       printf("=== STOP_PRIMARY ===\n");
+#endif      
    }
 
    if(currentBoutons & BIT_STOP_CONE)
    {
       UnitsOutput &= ~CONE_ON;
+#ifdef SERIAL_DEBUG
       printf("=== STOP CONE ===\n");
+#endif 
    }
    
    if(currentBoutons & BIT_STOP_ALL)
    {
       UnitsOutput = FORCE_TAMIS_OFF; 
+#ifdef SERIAL_DEBUG
       printf("=== STOP ALL ===\n");
+#endif      
    }
 
-printf("apres = %d\n",UnitsOutput);      
+#ifdef SERIAL_DEBUG
+printf("apres = %d\n",UnitsOutput);
+#endif      
 }
 
 
-unsigned char datapacket[2];
-unsigned char scrappacket;
+unsigned char datapacket[3];
 
 
-unsigned char SendInfo( uint64_t RF24_TX, unsigned char value)
+
+unsigned char SendInfo( uint64_t RF24_TX,unsigned char ID, unsigned char value)
 {
   bool ok;
   uint8_t pipe_number;
-   // stop listening
   
-   //delay(5);
-   //  envoyer UnitsOutput au bon receiver
+#ifdef SERIAL_DEBUG
    printf("radio => %2lx%lx ",(uint32_t)(RF24_TX>>32),(uint32_t) (RF24_TX));
    printf("value = %d  ",value);
+#endif   
    radio.stopListening(); 
    radio.openWritingPipe(RF24_TX);
-   //radio.stopListening();
-   ok=radio.write(&UnitsOutput,1);
-        
-   // start listening
-   radio.startListening();
-
-//    if (ok)
-//      printf("ok.....");
-//    else
-//      printf("failed.");
-      
-   
-   // maintenant attentons pour un réponse
-   unsigned long waitdelay = millis();
-   while(1)
+   datapacket[0]=ID_REMOTE;
+   datapacket[1]=UnitsOutput;
+   ok=radio.write(datapacket,2);
+ 
+  radio.startListening();
+  // maintenant attentons pour un réponse
+  unsigned long waitdelay = millis();
+  while(1)
     {
       if(radio.available(&pipe_number))
         {
            if(pipe_number==1)
              {
-               if(radio.read(datapacket,2))
+               if(radio.read(datapacket,3))
                  {
+                   if(datapacket[0] != ID)
+                   {
+                     #ifdef SERIAL_DEBUG
+                       printf("wrong packet\n\r");
+                     #endif
+                   }
+                  else
+                  {
                     // ok nous avons eu une réponse  
-                    printf("return %d %d \n\r",datapacket[0],datapacket[1]);
-                    while(!radio.read(&scrappacket,1)); // clean au cas ou
+                    #ifdef SERIAL_DEBUG
+                    printf("return %d %d \n\r",datapacket[1],datapacket[2]);
+                    #endif
                     break;
+                  }
                  }
 
              }
             else
              {
-               while(!radio.read(&scrappacket,1));
+              radio.read(datapacket,3);
              }          
         }
       
-      if((millis() - waitdelay) > 250)
+      if((millis() - waitdelay) > 50)
        {
+        #ifdef SERIAL_DEBUG
          printf("return time out\n");
+        #endif 
          radio.stopListening();
          return(0); // ok time out retourne 0
        }
@@ -247,11 +303,13 @@ unsigned char SendInfo( uint64_t RF24_TX, unsigned char value)
  */
 void syncInformation(void)
 {
- delay(10);
-#ifdef ENABLE_PRIMARY  
+ delay(20);
+#ifdef ENABLE_PRIMARY
+  #ifdef SERIAL_DEBUG  
    printf("PRIMARY :");
+  #endif
   // Envoi info au PRIMARY CRUSHER
-   if( SendInfo(RF24_PRIMARY,UnitsOutput))
+   if( SendInfo(RF24_PRIMARY,ID_PRIMARY,UnitsOutput))
     {
       // reset time out
       tempsValide_PRIMARY=millis();
@@ -271,23 +329,26 @@ void syncInformation(void)
  
 
 #ifdef ENABLE_CONE 
+  #ifdef SERIAL_DEBUG
    printf("CONE :");
+  #endif 
   // Envoi info au CONE_CRUSHER
-    if(SendInfo(RF24_CONE,UnitsOutput))
+    if(SendInfo(RF24_CONE,ID_CONE,UnitsOutput))
      {
          tempsValide_CONE=millis();
          Valide_CONE = true;
          // cone crusher retourne la valeur du boutton et le delay depuis son changement
-         // datapacket[0] c'est l'etat du bouton
-         // datapacket[1] c'est le temps en secondes
-         if(datapacket[0]==0)
+         // datapacket[0] c'est ID_CONE
+         // datapacket[1] c'est l'etat du bouton
+         // datapacket[2] c'est le temps en secondes
+         if(datapacket[1]==0)
            {
 
                // bouton non actif
                // donc primary OFF
                UnitsOutput &= ~PRIMARY_ON;
                // si ca fait plus de 10 secondes
-               if(datapacket[1] > 10)
+               if(datapacket[2] > 10)
                 {
                  UnitsOutput &= ~TAMIS_ON;
                  UnitsOutput |= FORCE_TAMIS_OFF;
@@ -297,9 +358,13 @@ void syncInformation(void)
            {
               // bouton ACTIF
               // si ca fait plus de 5 secondes
-              if(datapacket[1] > 5)
+              if(datapacket[2] > 5)
                  UnitsOutput |= PRIMARY_ON;
            }
+
+           // si RPM == 0 stop tout anyway
+           if(rpm == 0)
+            UnitsOutput = FORCE_TAMIS_OFF;
      }
      else
      {
@@ -314,18 +379,21 @@ void syncInformation(void)
 
 
 #ifdef ENABLE_TAMIS
-
+  #ifdef SERIAL_DEBUG
    printf("TAMIS :");
+  #endif 
   // Envoi info au TAMIS  retourne   RPM
-    if(SendInfo(RF24_TAMIS,UnitsOutput))
+    if(SendInfo(RF24_TAMIS,ID_TAMIS,UnitsOutput))
      {
          UnitsOutput &= ~FORCE_TAMIS_OFF;  // une fois le force TAMIS OFF envoyer on le reset
          tempsValide_CONE=millis();
          Valide_TAMIS = true;
          // TAMIS retourne la valeur en RPM boutton 
-         // datapacket[0] RPM
-         // datapacket[1] 0
-         if( datapacket[0] == 0)
+         // datapacket[0] ID_TAMIS
+         // datapacket[1] RPM
+         // datapacket[2] 0
+         rpm  = datapacket[1];
+         if( rpm == 0)
           {
             // ok all off
             UnitsOutput = FORCE_TAMIS_OFF;
@@ -367,7 +435,7 @@ void setup()
 
 
   
-   printf_begin();
+  printf_begin();
   Serial.begin(115200);
 
   Serial.println("NRF24L01 Transmitter");
@@ -380,7 +448,9 @@ void setup()
   radio.setPALevel(RF24_PA_HIGH);
   radio.openReadingPipe(1,RF24_REMOTE);
   radio.startListening();
+  #ifdef SERIAL_DEBUG
   radio.printDetails();
+  #endif
 }
 
 
@@ -424,13 +494,14 @@ unsigned char _tBoutons = lireBoutons();
 // Vérifier si cela fait plus de 1 seconde
 // que nous avons pas envoyer . Si oui envoyons l'info
 
-if( (cTimer - currentLapse) > 300)
+if( (cTimer - currentLapse) > 100)
   {
-printf("Units Output = %d \n",UnitsOutput);
-     
+
+    #ifdef SERIAL_DEBUG
+      printf("Units Output = %d  rpm=%d\n",UnitsOutput,rpm);
+    #endif 
      // 1 seconde écoulée  envoyons.
     syncInformation();
-    //printf(".");
     currentLapse = cTimer;
   }
 

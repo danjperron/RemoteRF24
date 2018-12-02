@@ -3,35 +3,60 @@
 #include "RF24.h"
 #include "printf.h"
 
-const uint8_t RF24_CANAL=76;
+const uint8_t RF24_CANAL=83;
+
+#define SERIAL_DEBUG
+//#undef SERIAL_DEBUG
+
 // verification si le rf24 recoit encore
 unsigned long tempsValide = 0;
 bool Valide = false;
-#define RF24_TIMEOUT 10000
-#define HALL_EFFECT_DEBOUNCE 100  //100ms debounce
+const unsigned long RF24_TIMEOUT=10000;
+const unsigned long HALL_EFFECT_DEBOUNCE=100;  //100ms debounce
 
 const uint64_t RF24_REMOTE  =0xF0F0F0F0E1LL;
 const uint64_t RF24_TAMIS   =0xF0F0F0F0D1LL;
 const uint64_t RF24_CONE    =0xF0F0F0F0D2LL;
 const uint64_t RF24_PRIMARY =0xF0F0F0F0D3LL;
 
+
+
+const uint8_t ID_REMOTE=0xE1;
+const uint8_t ID_TAMIS=0xD1;
+const uint8_t ID_CONE=0xD2;
+const uint8_t ID_PRIMARY=0xD3;
+
 const unsigned int nb_Aimant = 6;
 int Relay1 = 4;
 int Relay2 = 3;
 int DataMsg[1];
 int sensorState = 0;
-unsigned int rpm;
+unsigned int rpm=0;
 unsigned long timeold;
-volatile int rpmcount;
+volatile int rpmcount=0;
 unsigned long rpmTime;
 
+
+bool DrumRun=false;
 
 RF24 radio(8, 10);
 
 // buffer pour transmission receptio
 unsigned char Rcvdatapacket[2];
-unsigned char Txmdatapacket[2];
+unsigned char Txmdatapacket[3];
 
+
+
+
+/* variable principale pour les sorties 
+ *  l'information envoyer au remote est seulement un byte encoder par le bit définie pour chaque sortie
+ *  donc nous avons le tamis, le cone et le primary
+ */
+
+uint8_t PRIMARY_ON=1;
+uint8_t CONE_ON=2;
+uint8_t TAMIS_ON=4;
+uint8_t FORCE_TAMIS_OFF=8;
 // output mirroir
 unsigned int UnitsOutput= 0; // all off on boot
 
@@ -62,11 +87,12 @@ void setup()
    radio.setPALevel(RF24_PA_HIGH);
   radio.setPayloadSize(8);
   radio.stopListening();
-//  radio.openWritingPipe(RF24_REMOTE);
   radio.openWritingPipe(0);
   radio.openReadingPipe(1,RF24_TAMIS);
   radio.startListening();
-  radio.printDetails();
+  #ifdef SERIAL_DEBUG
+    radio.printDetails();
+  #endif
   tempsValide=millis();
   timeold=millis()-1;
   rpmcount=0;
@@ -128,13 +154,16 @@ void CylindreCycle(void)
 
 void loop() {
 uint8_t pipe_number;
+
+  CylindreCycle();
   if (rpmcount >= 1) {
     if((millis()-timeold) > HALL_EFFECT_DEBOUNCE)
     {
       // temps écoulé avec le dernier interrup ok donc c'est valide
        rpm = (60000 * rpmcount) / (nb_Aimant * (millis() - timeold)); //6 a changer si le nombre daimant est different
-
+#ifdef SERIAL_DEBUG
        printf("irq => rpm %d\n\r",rpm);
+#endif
     }
     timeold = millis();
     rpmcount = 0;
@@ -155,7 +184,9 @@ uint8_t pipe_number;
     rpmTime/=1000;
    
   }
-  
+
+  if(rpm>0)
+     DrumRun=true;
   
   if(radio.available(&pipe_number))
   {
@@ -163,30 +194,43 @@ uint8_t pipe_number;
   {
     // ok nous avons une connection
     // lisons l'info 
-    if(radio.read(Rcvdatapacket,1))
+    if(radio.read(Rcvdatapacket,2))
     {
+    if(Rcvdatapacket[0]==ID_REMOTE)
+    {  
     // envoyons bac1k;
-    UnitsOutput = Rcvdatapacket[0];
-    while(!radio.read(Rcvdatapacket,1)); // clean reste au cas ou   
+    UnitsOutput = Rcvdatapacket[1];
+    if(UnitsOutput & FORCE_TAMIS_OFF)
+     if(DrumRun)  // est-ce que le drum roule
+     {
+       if(cycle==0) // est-ce que le cylindre est en standby
+         cycle=1;  // ok fait l cycle
+       DrumRun=false;
+     }
 
-    Txmdatapacket[0]= rpm;
-    Txmdatapacket[1]= rpmTime;
+    // ok encore besoin de faire la logique avec le rpm 
+
+    Txmdatapacket[0]=ID_TAMIS;
+    Txmdatapacket[1]= rpm;
+    Txmdatapacket[2]= rpmTime;
     radio.stopListening();
-    delay(30);
+    delay(5);
     radio.openWritingPipe(RF24_REMOTE);
-    radio.write(Txmdatapacket,2);
+    radio.write(Txmdatapacket,3);
     delay(1);
     radio.openWritingPipe(0);
     radio.startListening();
-    printf("recu %d\n",Rcvdatapacket[0]);
-    printf("transmet %d %d\n",Txmdatapacket[0],Txmdatapacket[1]);
-    
+    #ifdef SERIAL_DEBUG
+      printf("recu UnitsOutput= %d\n",Rcvdatapacket[1]);
+      printf("transmet %d %d\n",Txmdatapacket[1],Txmdatapacket[2]);
+    #endif
     tempsValide=millis();
+    }
     }
   }
   else
   {
-    while(!radio.read(Rcvdatapacket,1));
+    radio.read(Rcvdatapacket,1);
   }
   }
   else
