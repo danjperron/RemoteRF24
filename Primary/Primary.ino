@@ -6,6 +6,10 @@
 #define SERIAL_DEBUG
 //#undef SERIAL_DEBUG
 
+// definition de l'activation du relay
+#define RELAY_NC  HIGH
+#define RELAY_NO  LOW
+
 const uint8_t RF24_CANAL=83;
 // variable pour le time out des LEDS
 // indiquant une bonne communication des unités
@@ -151,5 +155,5 @@ if(radio.available(&pipe_num))
 
 // mirror relay
 
-digitalWrite(RELAIS, UnitsOutput & PRIMARY_ON ? LOW : HIGH);
+digitalWrite(RELAIS, UnitsOutput & PRIMARY_ON ? RELAY_NO : RELAY_NC);
 }

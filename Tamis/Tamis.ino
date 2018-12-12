@@ -3,6 +3,11 @@
 #include "RF24.h"
 #include "printf.h"
 
+
+// definition de l'activation des relays
+#define RELAY_NC  HIGH
+#define RELAY_NO  LOW 
+
 const uint8_t RF24_CANAL=83;
 
 #define SERIAL_DEBUG
@@ -111,7 +116,7 @@ void CylindreCycle(void)
   {
     case 0 : break;  // ne fait rien
     case 1 : //sort cylindre
-            digitalWrite(Relay1, HIGH);
+            digitalWrite(Relay1, RELAY_NO);
             cycle_delay = millis();
             cycle = 2;
             break;
@@ -120,7 +125,7 @@ void CylindreCycle(void)
               {
                 // ok coupe signal
                 cycle_delay=millis();
-                digitalWrite(Relay1, LOW);
+                digitalWrite(Relay1, RELAY_NC);
                 cycle = 3;                
               }
               break;
@@ -129,7 +134,7 @@ void CylindreCycle(void)
               {
                 // ok rentre cylindre
                 cycle_delay=millis();
-                digitalWrite(Relay2, HIGH);
+                digitalWrite(Relay2, RELAY_NO);
                 cycle = 4;                
               }
               break;
@@ -138,7 +143,7 @@ void CylindreCycle(void)
               {
                 // ok coupe signal
                 cycle_delay=millis();
-                digitalWrite(Relay2, LOW);
+                digitalWrite(Relay2, RELAY_NC);
                 cycle = 5;                
               }
               break;

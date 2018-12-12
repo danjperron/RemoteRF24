@@ -3,6 +3,11 @@
 #include "RF24.h"
 #include "printf.h"
 
+// definition de l'activation des relays
+
+#define RELAY_NC HIGH
+#define RELAY_NO LOW
+
 
 #define SERIAL_DEBUG
 const uint8_t RF24_CANAL=83;
@@ -71,9 +76,9 @@ unsigned char Txmdatapacket[3];
 void setup()
 {
   pinMode(RELAIS_FEEDER, OUTPUT);
-  digitalWrite(RELAIS_FEEDER,HIGH);
+  digitalWrite(RELAIS_FEEDER,RELAY_NC);
   pinMode(RELAIS_LED, OUTPUT);
-  digitalWrite(RELAIS_LED,HIGH);
+  digitalWrite(RELAIS_LED, RELAY_NC);
   pinMode(BOUTON_LEVIER,INPUT);
   digitalWrite(BOUTON_LEVIER,HIGH);
   
@@ -175,6 +180,6 @@ if(radio.available(&pipe_number))
   }
 
 // mirror relay
-digitalWrite(RELAIS_LED, debounceBouton ? LOW : HIGH);
-digitalWrite(RELAIS_FEEDER, UnitsOutput & CONE_ON ? LOW : HIGH);
+digitalWrite(RELAIS_LED, debounceBouton ? RELAY_NC : RELAY_NO);
+digitalWrite(RELAIS_FEEDER, UnitsOutput & CONE_ON ? RELAY_NC : RELAY_NO);
 }

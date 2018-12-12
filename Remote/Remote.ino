@@ -15,6 +15,11 @@ const uint8_t RF24_CANAL=83;
 #define ENABLE_PRIMARY
 #undef ENABLE_PRIMARY
 
+
+#define LED_ON HIGH
+#define LED_OFF LOW
+
+
 /*
  *  remote control utilisant un nrf24L01
  *  PUSH BUTTON DEFINITION
@@ -91,6 +96,7 @@ bool Valide_PRIMARY = false;
 bool Valide_CONE = false;
 bool Valide_TAMIS = false;
 
+bool BoutonConeInactif10sec = false;
 const unsigned long RF24_TIMEOUT=10000;
 
 /* variable principale pour les sorties 
@@ -312,7 +318,7 @@ void syncInformation(void)
   // Envoi info au TAMIS  retourne   RPM
     if(SendInfo(RF24_TAMIS,ID_TAMIS,UnitsOutput))
      {
-         tempsValide_CONE=millis();
+         tempsValide_TAMIS=millis();
          Valide_TAMIS = true;
          // TAMIS retourne la valeur en RPM boutton 
          // datapacket[0] ID_TAMIS
@@ -338,7 +344,7 @@ void syncInformation(void)
      }
      else
      {
-      if((millis() - tempsValide_CONE) >  RF24_TIMEOUT)
+      if((millis() - tempsValide_TAMIS) >  RF24_TIMEOUT)
         {
               // ok time out sur la communication allons faire un stop complet
                UnitsOutput = 0;
@@ -388,10 +394,10 @@ void syncInformation(void)
          // datapacket[2] c'est le temps en secondes
          if(UnitsOutput&CONE_ON)
          {
-         if(datapacket[1]==0)
+         if(datapacket[1]>0)  
            {
 
-               // bouton non actif
+               // bouton non actif  == non pesé??
                // donc primary OFF
                UnitsOutput &= ~PRIMARY_ON;
                // si ca fait plus de 10 secondes
@@ -399,14 +405,23 @@ void syncInformation(void)
                 {
                  UnitsOutput &= ~TAMIS_ON;
                  UnitsOutput |= FORCE_TAMIS_OFF;
+                 BoutonConeInactif10sec = true;  // specifie que le bouton est inactif depuis 10 secondes
                 }
+                else
+                  BoutonConeInactif10sec = false;
            }
            else
            {
-              // bouton ACTIF
-              // si ca fait plus de 5 secondes
-              if(datapacket[2] > 5)
-                 UnitsOutput |= PRIMARY_ON;
+              // bouton ACTIF  pesé??
+              // était inactif depuis 10 sec 
+              if(BoutonConeInactif10sec)
+               {
+                if(datapacket[2] > 5)
+                    UnitsOutput |= PRIMARY_ON;
+               }
+               else
+                   UnitsOutput |= PRIMARY_ON;
+               
            }
          }
           else
@@ -528,23 +543,44 @@ if( (cTimer - currentLapse) > 1000)
   }
 
 // status des leds
-// allumer veut dire que cela fonctionne
-// flash veut dire pas de communication avec 
-
-if(millis() & 256)
-{
-  digitalWrite(LED_PRIMARY, HIGH);
-  digitalWrite(LED_TAMIS, HIGH);
-  digitalWrite(LED_CONE, HIGH);  
+// allumer ou éteind donne l'état des stations
+// flash rapide veut dire pas de communication avec la station
 
 
-  
-}
+// led PRIMAIRE
+if(Valide_PRIMARY)
+   {
+      digitalWrite(LED_PRIMARY, UnitsOutput & PRIMARY_ON ? LED_ON : LED_OFF);
+         
+   }
 else
-{
-  digitalWrite(LED_PRIMARY,Valide_PRIMARY);
-  digitalWrite(LED_TAMIS, Valide_TAMIS);
-  digitalWrite(LED_CONE, Valide_CONE);  
-}
+   {
+       // pas de communication
+       digitalWrite(LED_PRIMARY, (millis() & 256) ? HIGH : LOW);        
+   }
+
+// led CONE
+if(Valide_CONE)
+   {
+      digitalWrite(LED_CONE, UnitsOutput & CONE_ON ? LED_ON : LED_OFF); 
+         
+   }
+else
+   {
+       // pas de communication
+       digitalWrite(LED_CONE, (millis() & 256) ? HIGH : LOW);        
+   }
+
+// led TAMIS
+if(Valide_TAMIS)
+   {
+      digitalWrite(LED_TAMIS, UnitsOutput & TAMIS_ON ? LED_ON : LED_OFF); 
+         
+   }
+else
+   {
+       // pas de communication
+       digitalWrite(LED_TAMIS, (millis() & 256) ? HIGH : LOW);        
+   }
 
 }
